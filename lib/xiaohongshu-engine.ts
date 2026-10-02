@@ -6,6 +6,7 @@ import { assemblePromptPayload, type AssemblerInput, type LLMContentPart, type L
 import { DEFAULT_XIAOHONGSHU_BILINGUAL_PROMPT, resolveBilingualPrompt } from "./bilingual-prompt-defaults";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
 import { loadMemoryConfig } from "./memory-storage";
+import { getFeatureApi } from "./astrbot-features";
 import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
 import { prepareShortTermContext } from "./short-term-assembler";
 import {
@@ -1066,9 +1067,9 @@ async function resolveCharacterAssemblerInput(
   if (!character) return null;
   const bindings = loadBindingConfig();
   const activeSlot = resolveBinding(bindings, characterId, "xiaohongshu");
-  const apiConfig = activeSlot.apiConfigId
+  const apiConfig = getFeatureApi(characterId) ?? (activeSlot.apiConfigId
     ? loadApiConfigs().find(config => config.id === activeSlot.apiConfigId) ?? null
-    : null;
+    : null);
   const presets = loadPresets();
   let preset = activeSlot.presetId ? presets.find(item => item.id === activeSlot.presetId) ?? null : null;
   if (!preset) preset = presets.find(item => item.builtIn) ?? null;
@@ -1081,7 +1082,7 @@ async function resolveCharacterAssemblerInput(
   const userIdentity = resolveUserIdentity(characterId, "chat");
   const prepared = prepareShortTermContext(characterId, "xiaohongshu");
   const memConfig = loadMemoryConfig();
-  const [memories, coreMemories] = await Promise.all([
+  const [memories, coreMemories] = getFeatureApi(characterId) ? [[], []] : await Promise.all([
     retrieveMemoriesForPrompt(characterId, prepared.wbActivationContext, memConfig).catch(() => []),
     retrieveCoreMemoriesForPrompt(characterId, memConfig).catch(() => []),
   ]);

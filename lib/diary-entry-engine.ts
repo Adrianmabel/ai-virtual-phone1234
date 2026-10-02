@@ -11,6 +11,7 @@ import { prepareShortTermContext } from "./short-term-assembler";
 import { formatDiaryEntryContext, parseDiaryEntryContent, type ParsedDiaryEntry } from "./diary-entry-utils";
 import type { DiaryEntry, DiaryEntryTrigger } from "./diary-entry-types";
 import { beginDiaryGeneration, endDiaryGeneration } from "./diary-generating-tracker";
+import { getFeatureApi } from "./astrbot-features";
 
 type ResolvedDiaryEntryGeneration = {
   character: Character;
@@ -30,11 +31,11 @@ async function resolveDiaryEntryGeneration(
 
   const bindings = loadBindingConfig();
   const slot = resolveBinding(bindings, character.id, "diary");
-  if (!slot.apiConfigId) {
+  if (!slot.apiConfigId && !getFeatureApi(characterId)) {
     throw new ChatEngineError(`未给「日记」绑定 ${character.name} 的 API 配置。`);
   }
 
-  const apiConfig = loadApiConfigs().find(entry => entry.id === slot.apiConfigId);
+  const apiConfig = getFeatureApi(characterId) ?? loadApiConfigs().find(entry => entry.id === slot.apiConfigId);
   if (!apiConfig) throw new ChatEngineError(`找不到 ${character.name} 的 API 配置。`);
 
   const presets = loadPresets();
@@ -56,7 +57,7 @@ async function resolveDiaryEntryGeneration(
   const memConfig = loadMemoryConfig();
   const prepared = prepareShortTermContext(character.id, "diary", { history: [] });
 
-  const [memories, coreMemories] = await Promise.all([
+  const [memories, coreMemories] = getFeatureApi(characterId) ? [[], []] : await Promise.all([
     retrieveMemoriesForPrompt(character.id, prepared.wbActivationContext, memConfig).catch(() => []),
     retrieveCoreMemoriesForPrompt(character.id, memConfig).catch(() => []),
   ]);
@@ -86,6 +87,7 @@ export async function generateDiaryEntryForCharacter(
   entries: DiaryEntry[],
   _trigger: DiaryEntryTrigger = "manual",
 ): Promise<ParsedDiaryEntry> {
+  if (_trigger === "timer" && getFeatureApi(characterId)) throw new Error("文文日记只支持手动生成，定时生成未启用。");
   // Tracked at the engine so every caller (manual + background timer) shows up
   // in the diary app's "generating" indicator, even across app re-entry.
   beginDiaryGeneration(characterId);

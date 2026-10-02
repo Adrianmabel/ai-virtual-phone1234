@@ -36,14 +36,16 @@ import {
     resolveUserIdentity,
 } from "./settings-storage";
 import type { PresetConfig, ApiConfig } from "./settings-types";
-import { loadMemoryConfig, incrementEventCounter } from "./memory-storage";
+import { loadMemoryConfig, incrementEventCounter as incrementNativeEventCounter } from "./memory-storage";
 import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
-import { maybeRunSummarization } from "./memory-summarizer";
+import { maybeRunSummarization as maybeRunNativeSummarization } from "./memory-summarizer";
 import { assemblePromptPayload, type LLMMessage, type AssemblerInput } from "./llm-prompt-assembler";
 import type { RegexConfig } from "./settings-types";
 import { prepareShortTermContext } from "./short-term-assembler";
-import { parseActionTags, dispatchActions } from "./action-parser";
+import { parseActionTags, dispatchActions as dispatchNativeActions } from "./action-parser";
+import { getFeatureApi } from "./astrbot-features";
+
 import { buildCalendarScheduleMarker } from "./calendar-storage";
 import { getWeekStartIso } from "./calendar-utils";
 import { getCustomStickerNames, getCustomStickerExample } from "./custom-sticker-storage";
@@ -65,6 +67,16 @@ import {
 
 // ── Constants ──
 
+// Feature drafts never dispatch chat actions or enter native auto-memory jobs.
+const incrementEventCounter: typeof incrementNativeEventCounter = id => {
+    return getFeatureApi(id) ? 0 : incrementNativeEventCounter(id);
+};
+const maybeRunSummarization: typeof maybeRunNativeSummarization = (id, name) => {
+    return getFeatureApi(id) ? Promise.resolve() : maybeRunNativeSummarization(id, name);
+};
+const dispatchActions: typeof dispatchNativeActions = (actions, context) => {
+    return getFeatureApi(context.characterId) ? Promise.resolve() : dispatchNativeActions(actions, context);
+};
 
 // ── Module state ──
 
@@ -116,6 +128,7 @@ function pollScheduledPosts() {
     // 用户关掉自动发帖的角色：跳过调度（评论/点赞/手动立即发帖不受此开关影响）
     const disabledIds = new Set(loadMomentsConfig().autoPostDisabledCharacterIds);
     for (const contact of contacts) {
+        if (getFeatureApi(contact.characterId)) continue;
         if (disabledIds.has(contact.characterId)) continue;
         const schedule = getOrCreateSchedule(contact.characterId);
         if (schedule.nextPostAfter <= now) {
@@ -191,8 +204,8 @@ async function resolveAssemblerInput(
     const activeSlot = resolveBinding(bindings, characterId, "moments");
 
     // 2. Load API config
-    let apiConfig: ApiConfig | null = null;
-    if (activeSlot.apiConfigId) {
+    let apiConfig: ApiConfig | null = getFeatureApi(characterId);
+    if (!apiConfig && activeSlot.apiConfigId) {
         const apiConfigs = loadApiConfigs();
         apiConfig = apiConfigs.find(c => c.id === activeSlot.apiConfigId) ?? null;
     }
@@ -221,7 +234,7 @@ async function resolveAssemblerInput(
     let coreMemories = "";
     let longTermMemories = "";
     const memConfig = loadMemoryConfig();
-    if (task !== "npc") {
+    if (task !== "npc" && !getFeatureApi(characterId)) {
         try {
             const coreResultsPromise = retrieveCoreMemoriesForPrompt(characterId, memConfig);
             // Use native timeline as retrieval context (same cross-app data as short-term memory)
@@ -361,7 +374,7 @@ async function triggerAIPost(characterId: string): Promise<void> {
             return;
         }
 
-        if (parsed.photoDescription) {
+        if (parsed.photoDescription && !getFeatureApi(characterId)) {
             attachMomentPhotoInBackground(post.id, parsed.photoDescription, characterId, parsed.photoUseReferenceImage === true);
         }
 
@@ -372,7 +385,7 @@ async function triggerAIPost(characterId: string): Promise<void> {
 
         dispatchMomentsUpdated();
         // Character's post → NPC reactions (not other main characters)
-        generateNPCReactions(post, character);
+        if (!getFeatureApi(characterId)) generateNPCReactions(post, character);
 
     } finally {
         isGenerating = false;

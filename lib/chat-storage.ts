@@ -34,6 +34,7 @@ export type ChatContact = {
 };
 
 export type ChatSession = {
+    backend?: "native" | "astrbot";
     id: string;
     contactId: string;
     lastMessageId?: string;

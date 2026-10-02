@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type TouchEvent, type UIEvent, type WheelEvent } from "react";
 import { ShareFat } from "@phosphor-icons/react";
+import { getFeatureApi } from "@/lib/astrbot-features";
 import {
   AtSign,
   Bell,
@@ -1479,7 +1480,10 @@ export function XiaohongshuApp({ onClose, onNotice, visible = true, onIdle, onBu
     try {
       const activeSettings = state.settings;
       setBusy("npc-feed");
-      const { state: withNpc } = await generateNpcFeedState(state, activeSettings);
+      // The bound QQ persona generates its own activity, never impersonates
+      // unrelated NPCs or requires a separate phone API before it can run.
+      const hasBoundCharacter = activeSettings.participantCharacterIds.some(id => !!getFeatureApi(id));
+      const { state: withNpc } = hasBoundCharacter ? { state } : await generateNpcFeedState(state, activeSettings);
       setState(withNpc);
 
       if (activeSettings.participantCharacterIds.length > 0) {

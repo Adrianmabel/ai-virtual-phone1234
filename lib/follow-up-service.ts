@@ -169,6 +169,11 @@ export function stopFollowUpService() {
 /** Schedule a follow-up for a session (called by ChatRoom after AI replies).
  *  Purely anxiety-driven: no anxiety field or below threshold → no follow-up. */
 export function scheduleFollowUp(sessionId: string, count: number, stateValues?: StateValue[]) {
+    if (loadChatSessions().find(s => s.id === sessionId)?.backend === "astrbot") {
+        clearFollowUpSchedule(sessionId);
+        cancelFollowUpBailout(sessionId);
+        return;
+    }
     const config = loadFollowUpConfig();
 
     if (!stateValues || stateValues.length === 0) {
@@ -208,6 +213,7 @@ export async function requestBackgroundChatReply(sessionId: string): Promise<{ o
     if (backgroundReplyFiringSet.has(sessionId)) return { ok: false, skipped: "already_running" };
     const session = loadChatSessions().find(s => s.id === sessionId);
     if (!session) return { ok: false, skipped: "missing_session" };
+    if (session.backend === "astrbot") return { ok: false, skipped: "astrbot_manual_only" };
 
     backgroundReplyFiringSet.add(sessionId);
     try {
@@ -251,6 +257,7 @@ export function cancelFollowUp(sessionId: string) {
     clearFollowUpSchedule(sessionId);
     cancelFollowUpBailout(sessionId);
     // 用户发了消息：冷场重连计数清零，按新周期重挂服务端预约
+    if (loadChatSessions().find(s => s.id === sessionId)?.backend === "astrbot") return;
     const idleRule = resetIdleReconnectForSession(sessionId);
     if (idleRule) void armIdleReconnectBailout({ ...idleRule, consecutiveCount: 0 });
     // If an API call is already in-flight, mark it for cancellation
@@ -432,7 +439,7 @@ async function fireFollowUp(sched: { sessionId: string; count: number; delaySec?
     try {
         const sessions = loadChatSessions();
         const session = sessions.find(s => s.id === sched.sessionId);
-        if (!session) return;
+        if (!session || session.backend === "astrbot") return;
 
         const latestMessages = loadChatMessages(session.id);
 
@@ -575,7 +582,7 @@ async function fireIdleReconnect(rule: IdleReconnectRule, lastUserAt: number) {
     idleReconnectFiringSet.add(rule.id);
     try {
         const session = loadChatSessions().find(s => s.id === rule.sessionId);
-        if (!session || session.isGroup || session.contactId !== rule.characterId) return;
+        if (!session || session.backend === "astrbot" || session.isGroup || session.contactId !== rule.characterId) return;
 
         // 本地接手当前这次生成，先撤销服务端同规则排队任务；生成成功后才记连发次数。
         void cancelBailoutPrefix(`idle:${rule.id}:`);
@@ -636,7 +643,7 @@ async function fireTimedWake(sched: TimedWakeSchedule) {
     try {
         const sessions = loadChatSessions();
         const session = sessions.find(s => s.id === sched.sessionId);
-        if (!session || session.contactId !== sched.characterId) return;
+        if (!session || session.backend === "astrbot" || session.contactId !== sched.characterId) return;
 
         const latestMessages = loadChatMessages(session.id);
         const elapsedMinutes = resolveTimedWakeElapsedMinutes(sched, latestMessages, Date.now());
@@ -703,7 +710,7 @@ async function fireMenstrualPeriodCare(input: {
     try {
         const sessions = loadChatSessions();
         const session = sessions.find(s => s.id === input.sessionId);
-        if (!session || session.isGroup || session.contactId !== input.characterId) return;
+        if (!session || session.backend === "astrbot" || session.isGroup || session.contactId !== input.characterId) return;
         if (hasMenstrualPeriodCareTriggered(input.characterId, input.event.cycleKey)) return;
 
         const latestMessages = loadChatMessages(session.id);

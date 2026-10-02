@@ -14,6 +14,7 @@ import {
   resolveUserIdentity,
 } from "./settings-storage";
 import { assemblePromptPayload } from "./llm-prompt-assembler";
+import { getFeatureApi } from "./astrbot-features";
 import { loadMemoryConfig } from "./memory-storage";
 import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
@@ -145,12 +146,13 @@ async function resolveCalendarAssemblerInput(
   const bindings = loadBindingConfig();
   const activeSlot = resolveBinding(bindings, ownerType === "character" ? ownerId : undefined, "calendar");
 
-  if (!activeSlot.apiConfigId) {
+  const featureApi = ownerType === "character" ? getFeatureApi(ownerId) : null;
+  if (!activeSlot.apiConfigId && !featureApi) {
     throw new Error("未绑定日历 API，请先在配置绑定中为日历设置 API。");
   }
 
   const apiConfigs = loadApiConfigs();
-  const apiConfig = apiConfigs.find(entry => entry.id === activeSlot.apiConfigId);
+  const apiConfig = featureApi ?? apiConfigs.find(entry => entry.id === activeSlot.apiConfigId);
   if (!apiConfig) {
     throw new Error("日历 API 配置不存在。");
   }
@@ -186,7 +188,7 @@ async function resolveCalendarAssemblerInput(
   let unifiedRecentItems: import("./short-term-assembler").UnifiedRecentItem[] = [];
   let wbActivationContext = "";
 
-  if (ownerType === "character") {
+  if (ownerType === "character" && !featureApi) {
     const prepared = prepareShortTermContext(ownerId, "calendar", { history: [] });
     recentBlocks = prepared.recentBlocks;
     unifiedRecentItems = prepared.unifiedRecentItems;

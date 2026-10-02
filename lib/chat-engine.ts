@@ -35,6 +35,7 @@ import {
     resolveUserIdentity,
 } from "./settings-storage";
 import { assemblePromptPayload, applyOutputRegex, type LLMMessage, type LLMContentPart } from "./llm-prompt-assembler";
+import { generateFeature, isFeatureApi } from "./astrbot-features";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
 import { getStatusRegionConfig, resolveStatusRegionSection, resolveStatusRegionExampleLine, resolveStatusRegionComposition, resolveStatusRegionFullExample } from "./chat-status-region";
 import {
@@ -903,6 +904,7 @@ export async function sendLLMRequest(
     },
 ): Promise<string> {
     const pluginPurpose = options?.appId ?? "chat";
+    if (isFeatureApi(config)) return generateFeature(config, messages, options?.appId, options?.appTags, options?.signal);
     const afterPlugins = await applyChatPluginLlmRequest(preset, messages, pluginPurpose, options?.debugSessionId);
     const effectivePreset = afterPlugins.preset;
     const requestMessages = toLlmRequestMessages(afterPlugins.messages);
@@ -1776,6 +1778,9 @@ export async function buildChatPromptMessages(
     userIdentity: ReturnType<typeof resolveUserIdentity>;
     toolsEnabled: boolean;
 }> {
+    if (session.backend === "astrbot") {
+        throw new Error("此窗口由 AstrBot 管理；手机提示词、线下生成和云端接管已停用。");
+    }
     const chars = loadCharacters();
     const character = chars.find(c => c.id === session.contactId);
     if (!character) throw new ChatEngineError(`Character not found: ${session.contactId}`);
@@ -2484,6 +2489,13 @@ export async function generateChatCompletion(
     callbacks?: ChatCompletionCallbacks,
 ): Promise<ChatCompletionResult> {
     // 发送兜底（离线推送）：生成期间在服务端挂一张带心跳租约的保险单，
+    if (session.backend === "astrbot") {
+        if ((options?.appId && options.appId !== "chat") || options?.appTags?.includes("followup")) {
+            throw new Error("AstrBot 窗口只接受你主动发送的文字，不运行手机自主生成。");
+        }
+        const { generateAstrBotReply } = await import("./astrbot-client");
+        return generateAstrBotReply(session, history, options?.signal, callbacks);
+    }
     // 本地完成即撤销；App 被杀则心跳停跳，服务端接管生成并推送。
     const bailoutRef: ReplyBailoutRef = {
         current: null,
