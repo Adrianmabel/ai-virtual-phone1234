@@ -24,13 +24,14 @@ async function handle(request: NextRequest) {
         return fail("forbidden_origin", 403);
     }
     const path = request.nextUrl.pathname.slice("/api/astrbot/".length);
-    if (!(path === "login" || path === "jobs" || path === "pending" || /^jobs\/[a-zA-Z0-9_-]{8,100}(\/ack)?$/.test(path))) {
+    if (!(path === "login" || path === "jobs" || path === "features" || path === "pending" || /^jobs\/[a-zA-Z0-9_-]{8,100}(\/ack)?$/.test(path)
+        || /^features\/[a-zA-Z0-9_-]{8,100}\/(remember|memory(\/ack)?)$/.test(path))) {
         return fail("not_found", 404);
     }
-    if ((path === "login" || path === "jobs" || path.endsWith("/ack")) && request.method !== "POST") {
+    if ((path === "login" || path === "jobs" || path === "features" || path.endsWith("/ack") || path.endsWith("/remember")) && request.method !== "POST") {
         return fail("method_not_allowed", 405);
     }
-    if ((path === "pending" || /^jobs\/[a-zA-Z0-9_-]{8,100}$/.test(path)) && request.method !== "GET") {
+    if ((path === "pending" || path.endsWith("/memory") || /^jobs\/[a-zA-Z0-9_-]{8,100}$/.test(path)) && request.method !== "GET") {
         return fail("method_not_allowed", 405);
     }
     if (path !== "login") {
@@ -64,6 +65,9 @@ async function handle(request: NextRequest) {
                 body = JSON.stringify({ password: input.password,
                     peer: createHmac("sha256", secret).update("single-user-login").digest("hex") });
             } else if (path === "jobs") body = JSON.stringify({ id: input.id, text: input.text });
+            else if (path === "features") body = JSON.stringify({ id: input.id, kind: input.kind, task: input.task });
+            else if (path.endsWith("/remember")) body = JSON.stringify({ text: input.text, confirmed: input.confirmed });
+            else if (path.endsWith("/memory/ack")) body = JSON.stringify({ confirmed: input.confirmed });
             else body = "{}";
         } catch { return fail("invalid_request", 400); }
     }
