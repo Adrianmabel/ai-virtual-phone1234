@@ -6,6 +6,7 @@ import type { ChatSession } from "../../lib/chat-storage";
 import { bridgeRequest } from "../../lib/astrbot-client";
 import type { BridgeJob } from "../../lib/astrbot-client";
 import { cancelFollowUp, cancelBackgroundGeneration } from "../../lib/follow-up-service";
+import { FeatureDrafts } from "../../components/feature-drafts";
 
 export default function WenwenConnect() {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -34,10 +35,14 @@ export default function WenwenConnect() {
 
     async function checkJob() {
         const pending: BridgeJob | null = await bridgeRequest("pending");
+        if (pending && pending.kind && pending.kind !== "chat") {
+            setNotice("有一项功能草稿尚未确认，请在下方草稿区查看；它不会补进普通聊天。"); return;
+        }
         if (pending) localStorage.setItem(`wenwen-job:${selected}`, pending.id);
         const id = localStorage.getItem(`wenwen-job:${selected}`);
         if (!id) { setNotice("这个窗口还没有手机桥接消息。"); return; }
         const result: BridgeJob = await bridgeRequest(`jobs/${id}`);
+        if (result.kind && result.kind !== "chat") throw new Error("这是一项功能草稿，请在下方查看，不补进聊天。");
         setJob(result);
         setNotice({ queued: "消息已排队，请稍后再查。", running: "文文正在回复，请稍后再查。",
             completed: "回复已完成，可以补回原手机窗口。", failed: "本条未完成；详情见下方。",
@@ -108,7 +113,8 @@ export default function WenwenConnect() {
                     setNotice("已解除不确定状态。下一次请发送新消息；原消息没有重发。");
                 })}>核对后解除不确定状态</button>}
             </div>}
-            <p className="foot">第一期仅支持文字。手机的角色卡、提示词和旧聊天记录不会上传覆盖 AstrBot。中断等待不代表服务器停止；请查状态，不要连续重发。</p>
+            {sessions.find(s => s.id === selected && s.backend === "astrbot") && <FeatureDrafts key={selected} characterId={sessions.find(s => s.id === selected)!.contactId} />}
+            <p className="foot">本期只桥接文字。角色设定和原会话仍由 AstrBot 管理；功能仅上传格式规则与必要任务上下文。中断等待不代表服务器停止；请查状态，不要连续重发。</p>
             <a href="/">回到手机</a>
         </section>
     </main>;
