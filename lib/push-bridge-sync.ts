@@ -69,6 +69,7 @@ function toServerRule(rule: BridgeRule): (ServerBridgeRule & { actions: BridgeRu
     let chatMeta: ServerBridgeRule["chat"];
     if (chat?.characterId) {
         const session = ensureSessionFor(chat.characterId);
+        if (session.backend === "astrbot") return null;
         const characterName = loadCharacters().find(c => c.id === chat.characterId)?.name ?? "小手机";
         chatMeta = {
             characterId: chat.characterId,
@@ -116,6 +117,7 @@ async function buildRuleSnapshot(rule: BridgeRule): Promise<Record<string, unkno
     if (!chat?.characterId || !chat.requestReply) return null;
     try {
         const session = ensureSessionFor(chat.characterId);
+        if (session.backend === "astrbot") return null;
         const history = loadChatMessages(session.id);
         const historyRole = chat.historyRole && chat.historyRole !== chat.role ? chat.historyRole : undefined;
         const synthetic: ChatMessage = {
@@ -301,6 +303,7 @@ async function buildScreenChatSnapshot(): Promise<Record<string, unknown> | null
     if (!screen.enabled || !screen.characterId) return null;
     try {
         const session = ensureSessionFor(screen.characterId);
+        if (session.backend === "astrbot") return null;
         const history = loadChatMessages(session.id);
         const synthetic: ChatMessage = {
             id: "_screen_chat_sentinel",

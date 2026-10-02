@@ -2812,6 +2812,17 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         throwIfGenerationStopped(options);
         const responseBatchId = options?.responseBatchId || createResponseBatchId();
         const rawResponseText = options?.rawResponseText ?? aiResponseText;
+        if (session.backend === "astrbot") {
+            if (!aiResponseText.trim()) return { hasVisible: false, stateValues: [] };
+            if (!loadChatMessages(session.id).some(m => m.responseBatchId === responseBatchId)) {
+                const message = pushChatMessage({
+                    sessionId: session.id, role: "assistant", content: aiResponseText,
+                    responseBatchId, rawResponseText,
+                });
+                setMessages(prev => [...prev, message]);
+            }
+            return { hasVisible: true, stateValues: [] };
+        }
         const previousState = session.isGroup
             ? getLatestStateValues(session.id)
             : getLatestCharacterStateValues(session.contactId);
@@ -3984,7 +3995,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             setPendingGenerate(true);
             // 按回复键发送：消息落库后立即触发模型回复（无论插件是否异步改写，
             // 都在消息真正写入后触发，避免回复基于旧上下文）
-            if (options?.autoReply) void triggerAIResponse();
+            if (options?.autoReply || session.backend === "astrbot") void triggerAIResponse();
         };
 
         // 聊天插件织入点 user.beforeSend：无插件时走原同步路径，
