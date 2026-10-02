@@ -2,6 +2,7 @@ import { bgSetInterval } from "./bg-timer";
 import { loadCharacters } from "./character-storage";
 import type { Character } from "./character-types";
 import { generateDiaryEntryForCharacter } from "./diary-entry-engine";
+import { getFeatureApi } from "./astrbot-features";
 import {
   createDiaryEntry,
   loadDiaryEntries,
@@ -49,6 +50,7 @@ function getDueTargets(settings: DiaryEntryTimerSettings): Character[] {
   const now = Date.now();
   const intervalMs = Math.max(1, settings.intervalHours) * 60 * 60 * 1000;
   return targets.filter(character => {
+    if (getFeatureApi(character.id)) return false;
     const last = settings.lastRunAtByCharacter[character.id];
     const lastTime = last ? new Date(last).getTime() : 0;
     return !lastTime || now - lastTime >= intervalMs;

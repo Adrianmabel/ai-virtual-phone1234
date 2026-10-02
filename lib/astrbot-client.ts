@@ -4,6 +4,7 @@ import type { ChatCompletionCallbacks, ChatCompletionResult } from "./chat-engin
 
 export type BridgeJob = {
     id: string;
+    kind?: string;
     status: "queued" | "running" | "completed" | "failed" | "unknown";
     parts: { id: string; text: string }[];
     error?: string;
@@ -24,6 +25,7 @@ export async function bridgeRequest(path: string, body?: unknown, signal?: Abort
             commands_not_supported: "手机入口暂不支持 AstrBot 命令，请使用 QQ。",
             too_many_attempts: "登录尝试过多，请十分钟后再试。",
             incorrect_password: "连接密码不正确。",
+            features_disabled: "请先在桥接插件配置中开启 features_enabled（手机草稿功能）。",
         };
         throw new Error(hints[data.error] || "连接失败；请到连接页检查，勿重复发送。");
     }
@@ -43,7 +45,7 @@ export async function generateAstrBotReply(
     const id = Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, "0")).join("");
     const pending: BridgeJob | null = await bridgeRequest("pending", undefined, signal);
     if (pending && pending.id !== id) {
-        localStorage.setItem(`wenwen-job:${session.id}`, pending.id);
+        if (!pending.kind || pending.kind === "chat") localStorage.setItem(`wenwen-job:${session.id}`, pending.id);
         throw new Error("上一条消息尚未确认，请到连接页查看；这条新消息还没有交给 AstrBot。");
     }
     // Never send phone history, character cards, presets or model credentials.

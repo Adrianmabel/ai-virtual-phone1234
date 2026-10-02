@@ -35,6 +35,7 @@ import {
     resolveUserIdentity,
 } from "./settings-storage";
 import { assemblePromptPayload, applyOutputRegex, type LLMMessage, type LLMContentPart } from "./llm-prompt-assembler";
+import { generateFeature, isFeatureApi } from "./astrbot-features";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
 import { getStatusRegionConfig, resolveStatusRegionSection, resolveStatusRegionExampleLine, resolveStatusRegionComposition, resolveStatusRegionFullExample } from "./chat-status-region";
 import {
@@ -903,6 +904,7 @@ export async function sendLLMRequest(
     },
 ): Promise<string> {
     const pluginPurpose = options?.appId ?? "chat";
+    if (isFeatureApi(config)) return generateFeature(config, messages, options?.appId, options?.appTags, options?.signal);
     const afterPlugins = await applyChatPluginLlmRequest(preset, messages, pluginPurpose, options?.debugSessionId);
     const effectivePreset = afterPlugins.preset;
     const requestMessages = toLlmRequestMessages(afterPlugins.messages);

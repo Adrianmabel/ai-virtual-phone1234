@@ -17,6 +17,8 @@ import { formatCharacterRelationsForPrompt } from "./character-world-storage";
 import { buildCharacterTimeContext, buildGroupTimeContext, type CharacterTimeContext } from "./character-time";
 import { formatShoppingPaymentRequestHistory } from "./shopping-payment-request";
 import { buildGroupAdminBracketText } from "./group-admin";
+import { createBuiltinPreset } from "./builtin-preset";
+import { getFeatureApi, featureKind } from "./astrbot-features";
 
 export type LLMMessageRole = "system" | "user" | "assistant" | "tool";
 export type LLMToolCallPayload = { id: string; name: string; args: Record<string, unknown>; thoughtSignature?: string };
@@ -605,6 +607,23 @@ function isWBAtDepthPosition(entry: WorldBookEntry): boolean {
  * 预设里没有的东西一律不注入——不存在人设/世界书/记忆的硬编码兜底。
  */
 export function assemblePromptPayload(input: AssemblerInput): LLMMessage[] {
+    const kind = featureKind(input.appId, input.appTags);
+    if (kind && getFeatureApi(input.character.id)) {
+        const tags = input.appTags || [input.appId!];
+        const engine = new MacroEngine(input.character.name, "用户");
+        // Task-specific UI context only. Do not expand phone persona/history macros.
+        for (const key of ["phoneAppId", "phoneAppLabel", "phoneSnapshotSummary", "phoneLastRefreshAt",
+            "noteWallContext", "diaryEntryContext", "xiaohongshuFeedContext", "xiaohongshuUserPostContext",
+            "xiaohongshuCommentContext", "xiaohongshuMentionContext"] as const) {
+            engine[key] = input[key] || "";
+        }
+        const family = kind === "notewall" ? "diary_" : kind + "_";
+        const rules = createBuiltinPreset().prompts.filter(p => p.enabled && p.identifier.startsWith(family)
+            && p.identifier !== "moments_optional_actions" && matchesActiveTags(p.tags, tags));
+        if (!rules.length) throw new Error("当前功能的输出格式尚未适配，请勿回退到普通聊天 API。");
+        return [{ role: "user", content: rules.map(p => engine.expand(p.content)).join("\n\n"),
+            _debugMeta: { marker: "wenwen_feature_rules" } }];
+    }
     const { character, history, preset, worldBooks, regexes, userIdentity, userName = "User",
         longTermMemories, coreMemories, scheduleSummary } = input;
     const appId = input.appId ?? "chat";

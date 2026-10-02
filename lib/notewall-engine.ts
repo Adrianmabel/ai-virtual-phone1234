@@ -2,6 +2,7 @@ import { loadCharacters } from "./character-storage";
 import type { Character } from "./character-types";
 import { previewMessagesForApi, sendLLMRequest, ChatEngineError } from "./chat-engine";
 import { assemblePromptPayload, type LLMMessage } from "./llm-prompt-assembler";
+import { getFeatureApi } from "./astrbot-features";
 import { loadBindingConfig, loadApiConfigs, loadPresets, loadWorldBooks, loadRegexes, resolveBinding, resolveUserIdentity } from "./settings-storage";
 import type { ApiConfig, PresetConfig, RegexConfig, WorldBookConfig } from "./settings-types";
 import { loadMemoryConfig } from "./memory-storage";
@@ -108,11 +109,11 @@ async function resolveNoteWallGeneration(
 
   const bindings = loadBindingConfig();
   const slot = resolveBinding(bindings, character.id, "diary");
-  if (!slot.apiConfigId) {
+  if (!slot.apiConfigId && !getFeatureApi(characterId)) {
     throw new ChatEngineError(`未给「日记」绑定 ${character.name} 的 API 配置。`);
   }
 
-  const apiConfig = loadApiConfigs().find(entry => entry.id === slot.apiConfigId);
+  const apiConfig = getFeatureApi(characterId) ?? loadApiConfigs().find(entry => entry.id === slot.apiConfigId);
   if (!apiConfig) throw new ChatEngineError(`找不到 ${character.name} 的 API 配置。`);
 
   const presets = loadPresets();
@@ -134,7 +135,7 @@ async function resolveNoteWallGeneration(
   const memConfig = loadMemoryConfig();
   const prepared = prepareShortTermContext(character.id, "diary", { history: [] });
 
-  const [memories, coreMemories] = await Promise.all([
+  const [memories, coreMemories] = getFeatureApi(characterId) ? [[], []] : await Promise.all([
     retrieveMemoriesForPrompt(character.id, prepared.wbActivationContext, memConfig).catch(() => []),
     retrieveCoreMemoriesForPrompt(character.id, memConfig).catch(() => []),
   ]);
@@ -163,6 +164,7 @@ export async function generateNoteWallCharacterNote(
   notes: NoteWallNote[],
   _trigger: "manual" | "timer" = "manual",
 ): Promise<ParsedNoteWallAction> {
+  if (_trigger === "timer" && getFeatureApi(characterId)) throw new Error("文文便签只支持手动生成，定时生成未启用。");
   const resolved = await resolveNoteWallGeneration(
     characterId,
     ["diary", "notewall"],

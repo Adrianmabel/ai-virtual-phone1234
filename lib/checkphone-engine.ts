@@ -53,6 +53,7 @@ import {
 } from "./checkphone-json-repair";
 import type { LLMMessage } from "./llm-prompt-assembler";
 import { assemblePromptPayload } from "./llm-prompt-assembler";
+import { getFeatureApi } from "./astrbot-features";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
 import { loadMemoryConfig } from "./memory-storage";
 import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
@@ -101,7 +102,7 @@ function resolveCheckPhoneConfigs(characterId: string): {
   const allWorldBooks = loadWorldBooks();
   const allRegexes = loadRegexes();
 
-  const apiConfig = apiConfigs.find((item) => item.id === binding.apiConfigId) ?? apiConfigs[0] ?? null;
+  const apiConfig = getFeatureApi(characterId) ?? apiConfigs.find((item) => item.id === binding.apiConfigId) ?? apiConfigs[0] ?? null;
   const preset = presets.find((item) => item.id === binding.presetId) ?? presets[0] ?? null;
   const worldBooks = (binding.worldBookIds ?? [])
     .map((id) => allWorldBooks.find((item) => item.id === id))
